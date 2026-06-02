@@ -1126,7 +1126,7 @@ W6X_Status_t W6X_Ble_SetBdAddress(const uint8_t *bdaddr);
   *         If needed, they must be preceded by a \ to be interpreted correctly.
   * @return Operation status
   */
-W6X_Status_t W6X_Ble_SetDeviceName(char *name);
+W6X_Status_t W6X_Ble_SetDeviceName(const char *name);
 
 /**
   * @brief  This function retrieves the BLE device name

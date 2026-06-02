@@ -267,7 +267,7 @@ W6X_Status_t W6X_Ble_SetBdAddress(const uint8_t *bdaddr)
   return TranslateErrorStatus(W61_Ble_SetBDAddress(p_DrvObj, bdaddr));
 }
 
-W6X_Status_t W6X_Ble_SetDeviceName(char *name)
+W6X_Status_t W6X_Ble_SetDeviceName(const char *name)
 {
   NULL_ASSERT(p_DrvObj, W6X_Ble_Uninit_str);
 
