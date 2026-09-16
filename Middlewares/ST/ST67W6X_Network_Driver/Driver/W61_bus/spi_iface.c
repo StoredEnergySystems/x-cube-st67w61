@@ -336,6 +336,27 @@ static int32_t inline spi_clear_event(struct spi_xfer_engine *engine, uint32_t e
   return 0;
 }
 
+static int32_t spi_wait_txn_ready(struct spi_xfer_engine *engine)
+{
+  int32_t ready;
+
+  /* The ready edge can occur before the event wait starts. Check the level
+   * first, then wait for the event so the check remains race-free. */
+  if (spi_port_is_ready())
+  {
+    spi_clear_event(engine, SPI_EVT_TXN_RDY);
+    return 1;
+  }
+
+  ready = spi_wait_event(engine, SPI_EVT_TXN_RDY, SPI_WAIT_TXN_TIMEOUT_MS);
+  if (!ready)
+  {
+    spi_err("txn ready timeout diag: level=%" PRIi32 "\n", spi_port_is_ready());
+  }
+
+  return ready;
+}
+
 static int32_t spi_txrx(struct spi_xfer_engine *engine, void *tx_buf, void *rx_buf, uint16_t len)
 {
   int32_t status;
@@ -362,6 +383,7 @@ static int32_t spi_txrx(struct spi_xfer_engine *engine, void *tx_buf, void *rx_b
   }
   else
   {
+#if defined(CONFIG_SPI_STM32_DMA)
     status = spi_port_transfer_dma(tx_buf, rx_buf, len);
     if (status < 0)
     {
@@ -376,6 +398,17 @@ static int32_t spi_txrx(struct spi_xfer_engine *engine, void *tx_buf, void *rx_b
       SPI_STAT_INC(&engine->stat, wait_msg_xfer_timeouts, 1);
       return -3;
     }
+#else
+    /* Without STM32 DMA, the async signal path adds a completion dependency
+     * without providing DMA. Use the driver's synchronous interrupt path. */
+    status = spi_port_transfer(tx_buf, rx_buf, len, SPI_WAIT_POLL_XFER_TIMEOUT_MS);
+    if (status < 0)
+    {
+      spi_err("spi txrx failed, %" PRIi32 "\n", status);
+      SPI_STAT_INC(&engine->stat, io_err, 1);
+      return -2;
+    }
+#endif
   }
 
   return 0;
@@ -441,8 +474,7 @@ static int32_t spi_xfer_one(struct spi_xfer_engine *engine, struct spi_buffer *t
 
   spi_trace(SPI_TP_NONE, "wait_txn_rdy %" PRIi32 "\n", wait_txn_rdy);
   engine->state = SPI_XFER_STATE_FIRST_PART;
-  if (wait_txn_rdy &&
-      !spi_wait_event(engine, SPI_EVT_TXN_RDY, SPI_WAIT_TXN_TIMEOUT_MS))
+  if (wait_txn_rdy && !spi_wait_txn_ready(engine))
   {
     SPI_STAT_INC(&engine->stat, wait_txn_timeouts, 1);
     spi_err("waiting for spi txn ready timeouted\n");
